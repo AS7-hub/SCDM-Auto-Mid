@@ -1,0 +1,7 @@
+counterparty_id,counterparty_name,counterparty_type,relationship_raw,country_region,industry,confidence_pct,last_update_date,days_since_last_update,freshness,snippet_count,revenue_(usd),eq_score,implied_rating,relationship,start_id,end_id,source_file,source_company_id,source_company_name
+4295876746,TOYOTA MOTOR CORPORATION,Public,Customer,Japan,Auto & Truck Manufacturers,100.0,2016-12-19,3556,1,4,336666618854.954,18.0,BBB+,SELLS_TO,4295867571,4295876746,Opmobility SE.xlsx,4295867571,Opmobility SE
+4298546138,General Motors Co,Public,Customer,United States of America,Auto & Truck Manufacturers,63.91920536544,2025-07-24,417,5,4,185019000000.0,30.0,BB+,SELLS_TO,4295867571,4298546138,Opmobility SE.xlsx,4295867571,Opmobility SE
+5043319761,Stellantis N.V.,Public,Customer,Netherlands,Auto & Truck Manufacturers,55.734782102400004,2025-07-24,417,5,3,173509547466.586,25.0,,SELLS_TO,4295867571,5043319761,Opmobility SE.xlsx,4295867571,Opmobility SE
+5069413212,Neural Concept SA,Private,Supplier,Switzerland,IT Services & Consulting,31.687448,2025-03-18,545,4,2,14600000.0,,,SUPPLIES,5069413212,4295867571,Opmobility SE.xlsx,4295867571,Opmobility SE
+4295869244,Volkswagen AG,Public,Customer,Germany,Auto & Truck Manufacturers,31.771296,2015-04-22,4163,1,2,363857121150.762,8.0,BBB-,SELLS_TO,4295867571,4295869244,Opmobility SE.xlsx,4295867571,Opmobility SE
+4295903068,Ford Motor Co,Public,Customer,United States of America,Auto & Truck Manufacturers,29.41844,2025-07-24,417,5,2,187267000000.0,19.0,BB+,SELLS_TO,4295867571,4295903068,Opmobility SE.xlsx,4295867571,Opmobility SE

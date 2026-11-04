@@ -1,0 +1,47 @@
+company_id,company_name,company_type,country_region,industry,is_focal,layer
+5038056692,Amazon Web Services Inc,Private,United States of America,IT Services & Consulting,True,CANONICAL_DATA
+4295903508,"Autoliv, Inc.",Public,Sweden,"Auto, Truck & Motorcycle Parts",True,CANONICAL_DATA
+4295869227,Bayerische Motoren Werke Aktiengesellschaft,,,,True,CANONICAL_DATA
+4295903602,BorgWarner Inc.,Public,United States of America,"Auto, Truck & Motorcycle Parts",True,CANONICAL_DATA
+5072810025,Constellium SE,Public,France,Aluminum,True,CANONICAL_DATA
+5044178555,"Contemporary Amperex Technology Co., Limited",,,,True,CANONICAL_DATA
+4295903829,Cummins Inc,Public,United States of America,"Auto, Truck & Motorcycle Parts",True,CANONICAL_DATA
+4295903830,Dana Inc,Public,United States of America,"Auto, Truck & Motorcycle Parts",True,CANONICAL_DATA
+4295911999,Dauch Corp,Public,United States of America,"Auto, Truck & Motorcycle Parts",True,CANONICAL_DATA
+4295903068,Ford Motor Co,,,,True,CANONICAL_DATA
+4295868248,Forvia SE,,,,True,CANONICAL_DATA
+4295865681,Fuyao Glass Industry Group Co Ltd,,,,True,CANONICAL_DATA
+4298546138,General Motors Co,,,,True,CANONICAL_DATA
+4295906573,Gentex Corporation,,,,True,CANONICAL_DATA
+4295904095,Group 1 Automotive Inc,Public,United States of America,"Auto Vehicles, Parts & Service Retailers",True,CANONICAL_DATA
+4295881024,"HANKOOK & COMPANY CO., LTD.",,,,True,CANONICAL_DATA
+4295904132,Harman International Industries Inc,,,,True,CANONICAL_DATA
+4295881489,Hyundai Mobis Co Ltd,,,,True,CANONICAL_DATA
+4295881548,HYUNDAI MOTOR COMPANY,,,,True,CANONICAL_DATA
+4295904406,Lear Corporation,,,,True,CANONICAL_DATA
+4295882004,LG Chem Ltd,,,,True,CANONICAL_DATA
+5079221808,LG Energy Solution Ltd,,,,True,CANONICAL_DATA
+4295861309,Magna International Inc.,,,,True,CANONICAL_DATA
+4295869694,Mercedes-Benz Group AG,,,,True,CANONICAL_DATA
+4295903176,"Micron Technology, Inc.",,,,True,CANONICAL_DATA
+4295876068,MITSUBISHI MOTORS CORPORATION,,,,True,CANONICAL_DATA
+5083481283,Mobileye Global Inc,Public,Israel,Integrated Hardware & Software,True,CANONICAL_DATA
+4295881824,Nexen Tire Corp,,,,True,CANONICAL_DATA
+4295877341,"NISSAN MOTOR CO., LTD.",,,,True,CANONICAL_DATA
+5060592373,Northvolt AB,,,,True,CANONICAL_DATA
+4295914405,NVIDIA Corporation,,,,True,CANONICAL_DATA
+4295867571,Opmobility SE,,,,True,CANONICAL_DATA
+4295907706,QUALCOMM Incorporated,,,,True,CANONICAL_DATA
+4295867385,Renault SA,,,,True,CANONICAL_DATA
+4295881194,Samsung SDI Co Ltd,,,,True,CANONICAL_DATA
+4295872161,Samvardhana Motherson International Ltd,,,,True,CANONICAL_DATA
+4298008784,SK Innovation Co Ltd,,,,True,CANONICAL_DATA
+5043319761,Stellantis N.V.,,,,True,CANONICAL_DATA
+4295877384,SUZUKI MOTOR CORPORATION,,,,True,CANONICAL_DATA
+5088024644,Tesla Inc,,,,True,CANONICAL_DATA
+4295880095,TKJP Corp (Tokyo),,,,True,CANONICAL_DATA
+4295884961,TomTom NV,,,,True,CANONICAL_DATA
+4295876746,TOYOTA MOTOR CORPORATION,,,,True,CANONICAL_DATA
+4295867394,Valeo SE,,,,True,CANONICAL_DATA
+4295911984,Visteon Corporation,,,,True,CANONICAL_DATA
+4295869244,Volkswagen AG,,,,True,CANONICAL_DATA

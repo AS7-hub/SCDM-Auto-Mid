@@ -1,0 +1,7 @@
+counterparty_id,counterparty_name,counterparty_type,relationship_raw,country_region,industry,confidence_pct,last_update_date,days_since_last_update,freshness,snippet_count,revenue_(usd),eq_score,implied_rating,relationship,start_id,end_id,source_file,source_company_id,source_company_name
+4295869354,Audi AG,Private,Customer,Germany,Auto & Truck Manufacturers,67.9894737265459,2021-07-29,1873,1,5,74037808372.8783,,A-,SELLS_TO,5072810025,4295869354,Constellium SE.xlsx,5072810025,Constellium SE
+4296958781,Daher Lhotellier,Private,Customer,France,Airlines,62.9797659937536,2023-01-10,1343,2,4,,,,SELLS_TO,5072810025,4296958781,Constellium SE.xlsx,5072810025,Constellium SE
+4295952228,Pyrogenesis Inc,Private,Supplier,Canada,Iron & Steel,56.859644774399996,2026-03-06,192,5,3,148490.157906122,,,SUPPLIES,4295952228,5072810025,Constellium SE.xlsx,5072810025,Constellium SE
+4295867385,Renault SA,Public,Customer,France,Auto & Truck Manufacturers,54.951326342399994,2024-12-12,641,4,3,65469030984.4413,30.0,BB+,SELLS_TO,5072810025,4295867385,Constellium SE.xlsx,5072810025,Constellium SE
+4296159682,GTT Communications Inc,Private,Supplier,United States of America,IT Services & Consulting,29.538431999999997,2026-01-08,249,5,2,1700000000.0,,,SUPPLIES,4296159682,5072810025,Constellium SE.xlsx,5072810025,Constellium SE
+5000661878,US Department of Energy,Private,Customer,United States of America,Government Administration Activities,28.4288,2024-03-25,903,4,2,,,,SELLS_TO,5072810025,5000661878,Constellium SE.xlsx,5072810025,Constellium SE

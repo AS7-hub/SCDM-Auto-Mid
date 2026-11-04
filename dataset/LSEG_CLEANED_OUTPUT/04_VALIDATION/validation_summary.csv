@@ -1,0 +1,15 @@
+Metric,Value
+Input files,46
+Successfully processed files,46
+Failed files,0
+Total raw relationship rows,3536
+Total cleaned relationship rows,3536
+SUPPLIES edges,1881
+SELLS_TO edges,1655
+Unique companies,1933
+Unique focal companies,46
+Anomalies count,0
+Self loops,0
+Missing Counterparty IDs,0
+Missing Relationships,0
+Company ID conflicts,0

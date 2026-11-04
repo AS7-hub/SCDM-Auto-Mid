@@ -1,0 +1,62 @@
+# SCDM Auto Mid - Implementation Tasks
+
+- [x] Phase 0: Ground-Truth Audit
+  - [x] Inspect project directory and dataset files
+  - [x] Audit dataset structure and data quality
+  - [x] Check Python environment and dependencies
+  - [x] Verify Neo4j connectivity and schema
+  - [x] Verify Gemini API access
+- [x] Phase 1: Environment Setup & Tooling
+  - [x] Set up environment and dependencies (langgraph, pydantic, neo4j, etc.)
+  - [x] Configure environment variables correctly (fix Neo4j port)
+  - [x] Create centralized configuration contract
+  - [x] Establish canonical domain schemas and data contract
+  - [x] Document graph semantics contract
+- [x] Phase 2: Data Ingestion Pipeline
+  - [x] Raw LSEG/Refinitiv files are successfully detected, parsed (metadata skipped), and extracted.
+  - [x] Deduping logic correctly categorizes duplicate companies and relationships.
+  - [x] Cleaned Canonical outputs generated safely in local output directory.
+- [x] **Phase 3: Neo4j Synchronization (Reconciliation Complete)**
+  - Existing graph was audited: identified 2,909 nodes but only 2,053 unique `company_id`s, proving significant duplication.
+  - Lineage was traced: the database is exactly `tier 1 top 50` + `datasets btp1`.
+  - Strategy chosen: In the next phase, we will wipe the duplicated legacy data and safely load the canonical subset using the newly designed `MERGE`-based graph loader.
+- [x] **Phase 4: Neo4j Execution (Completed)**
+  - Successfully snapshotted the corrupted legacy graph.
+  - Reset the `neo4j` database using DETACH DELETE.
+  - Safely executed the idempotent `MERGE`-based graph loader.
+  - Idempotency test successfully proved no duplicate node or relationship creation on subsequent runs.
+  - Validated graph topology directly matches the canonical dataset (1,933 companies, 3,482 relationships).
+- [x] **Phase 5: Deterministic Graph-Analysis Layer (Completed)**
+  - Developed `EntityResolver` handling exact ID, exact normalized name, and indexed partial search resolution with strict states (`RESOLVED`, `AMBIGUOUS`, `UNRESOLVED`).
+  - Developed `GraphTraversal` handling dynamic, parameterized upstream tier derivation (Tier 1..N) deduplicating by graph topology.
+  - Implemented analytical Pydantic models (`ExposureResult`, `SupplierPath`, etc.).
+  - Documented analytical contract natively separating deterministic exposure from LLM interpretation.
+  - Tested directly against the real canonical Neo4j graph structure.
+- [x] **Phase 6: Risk Engine & Analysis (Completed)**
+  - Audited feature availability: Replaced missing volume data with deterministic topological proxies (Path Concentration for Dependency Ratio).
+  - Developed `RiskEngine` operating strictly on graph topology and `ExposureResult`.
+  - Implemented configurable weighting based heavily on the reference baseline (Breadth 35%, Concentration 25%, Criticality 20%, Centrality 10%, Depth 10%).
+  - Added robust global normalization and zero-division protection to `[0,1]` scale.
+  - Implemented precise scoring breakdown with feature contributions, weights, and explicit LLM-free textual reasons.
+  - Validated mathematically against `test_risk_engine.py` and actively against a real "Volkswagen AG" depth-3 query.
+- [x] **Architecture Verification & Audit (Phase 7-8 Implementation Review)**
+  - [x] Audit 7-agent target architecture against actual codebase
+  - [x] Agent 1 (Disruption Monitoring): IMPLEMENTED (`src/scdm/agents/disruption_monitor.py`, tested with unit mocks)
+  - [x] Agent 2 (Knowledge Graph Query): PARTIALLY IMPLEMENTED (Implemented as deterministic libraries in `analysis/resolution.py` and `analysis/traversal.py`; authoritative Neo4j Cypher without LLM; no standalone agent class)
+  - [x] Agent 3 (Product Search): IMPLEMENTED (`src/scdm/agents/product_search.py`, evidence-grounded extraction, strictly integrated into pipeline before entity resolution, tests added)
+  - [x] Agent 4 (Network Visualizer): NOT IMPLEMENTED (No visualizer or graph rendering component)
+  - [x] Agent 5 (Risk Manager): PARTIALLY IMPLEMENTED (Implemented as deterministic engine in `analysis/risk_engine.py`; authoritative numerical scoring without LLM; no standalone agent class)
+  - [x] Agent 6 (CSCO Decision): IMPLEMENTED (`src/scdm/agents/csco.py`, consumes deterministic risk, tested with unit mocks)
+  - [x] Human Approval Gate: PARTIALLY IMPLEMENTED (State enums and conditional edge blocking in `workflow/graph.py`; synchronous callback/CLI prompt rather than persistent LangGraph checkpointer)
+  - [x] Agent 7 (Alternative Sourcing): IMPLEMENTED (`src/scdm/agents/alternative_sourcing.py`, fully deterministic graph qualification and ranking algorithm strictly post-approval)
+  - [x] LangGraph Orchestration: PARTIALLY IMPLEMENTED (`workflow/graph.py` uses StateGraph. Unit test coverage and robust error-handling now added via stabilization phase)
+  - [x] CLI Execution: DEFECT FIXED (MOCK mode execution works with matched method signatures in `MockTraversal` and `MockRiskEngine`. Extensive CLI and workflow tests added)
+- [x] **Phase 11: Evaluation, Reproducibility, Security Hygiene & BTP Readiness (Completed)**
+  - [x] Security / Secret Hygiene Audit: All API keys, passwords, and user paths removed.
+  - [x] Reproducible Environment: `docs/reproducibility.md` created.
+  - [x] Evaluation Harness: `evaluate.py` added for metrics.
+  - [x] End-to-End Scenario Suite: `run_btp_demo.py` created for deterministic presentations.
+  - [x] LLM Budget Evidence: Telemetry added to `LLMClient`.
+  - [x] Research-Claim Audit: User-facing outputs purged of unsupported prediction claims.
+  - [x] BTP Evaluation Report: `docs/btp_evaluation.md` finalized.
+  - [x] Final Graph Snapshot: Verified exact node (1,933) and rel (3,482) integrity.

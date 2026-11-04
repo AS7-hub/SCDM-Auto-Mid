@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "scdm"
+version = "0.1.0"
+description = "Supply Chain Disruption Monitor (SCDM) - Deterministic Graph & Multi-Agent Framework"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+    { name = "Arkaprovo Sarkar" }
+]
+dependencies = [
+    "pydantic>=2.0.0",
+    "pydantic-settings>=2.0.0",
+    "neo4j>=5.0.0",
+    "langgraph>=0.0.26",
+    "networkx>=3.0",
+    "pandas>=2.0.0",
+    "pytest>=7.0.0",
+    "google-genai>=0.1.0",
+    "duckduckgo-search>=6.0.0",
+    "ddgs>=9.16.0"
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
