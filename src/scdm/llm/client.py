@@ -101,6 +101,12 @@ class LLMClient:
                 if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
                     logger.error(f"LLM Quota Exceeded (429): {e}")
                     raise LLMQuotaExceededError(f"Quota exceeded: {e}")
+                if "503" in str(e) or "UNAVAILABLE" in str(e) or "high demand" in str(e).lower():
+                    # Fallback to stable fast model if current model experiences high demand spikes
+                    fallback_model = "gemini-2.5-flash"
+                    if self.model != fallback_model:
+                        logger.warning(f"Model {self.model} hit 503 high demand. Falling back to {fallback_model} for attempt {retries + 1}...")
+                        self.model = fallback_model
                 logger.warning(f"LLM call failed on attempt {retries + 1}: {e}")
                 last_error = e
                 

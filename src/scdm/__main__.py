@@ -192,5 +192,34 @@ def main():
     final_wf = current_state[list(current_state.keys())[0]]["workflow_state"]
     print(render_cli_report(final_wf))
 
+    # Auto-persist run artifacts for visualization & audit history
+    try:
+        from pathlib import Path
+        from datetime import datetime
+        from scdm.reporting.html_visualizer import export_run_to_html
+        
+        output_dir = Path("output")
+        runs_dir = output_dir / "runs"
+        runs_dir.mkdir(parents=True, exist_ok=True)
+        
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        run_file = runs_dir / f"run_{timestamp}.json"
+        latest_file = output_dir / "latest_run.json"
+        html_file = output_dir / "visualizer.html"
+        
+        run_json = final_wf.model_dump_json(indent=2)
+        with open(run_file, "w", encoding="utf-8") as f:
+            f.write(run_json)
+        with open(latest_file, "w", encoding="utf-8") as f:
+            f.write(run_json)
+            
+        # Export self-contained HTML visualizer with exact run data embedded directly
+        export_run_to_html(final_wf, str(html_file))
+            
+        print(f"\n[SCDM] Execution state saved to {latest_file} and {run_file}")
+        print(f"[SCDM] Live Visualizer generated: file:///{html_file.resolve()}")
+    except Exception as e:
+        logger.warning(f"Could not persist run state: {e}")
+
 if __name__ == "__main__":
     main()
