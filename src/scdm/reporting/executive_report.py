@@ -5,11 +5,31 @@ from scdm.domain.constants import ApprovalState, EvidenceStatus
 
 logger = logging.getLogger(__name__)
 
+def _get_company_map():
+    try:
+        from pathlib import Path
+        import pandas as pd
+        base_dir = Path(__file__).resolve().parent.parent.parent.parent
+        for p in [
+            base_dir / "all_unique_companies_and_codes.csv",
+            base_dir / "output" / "canonical" / "canonical_companies.csv",
+            base_dir / "dataset" / "canonical" / "canonical_companies.csv"
+        ]:
+            if p.exists():
+                df = pd.read_csv(p)
+                id_col = 'Unique Company Code' if 'Unique Company Code' in df.columns else 'company_id'
+                name_col = 'Company Name' if 'Company Name' in df.columns else 'company_name'
+                return dict(zip(df[id_col].astype(str), df[name_col].fillna("Company-" + df[id_col].astype(str))))
+    except Exception:
+        pass
+    return {}
+
 def render_cli_report(state: WorkflowState) -> str:
     """
     Renders a deterministic, human-readable CSCO executive report.
     Clearly distinguishes factual graph data, external evidence, and LLM interpretation.
     """
+    comp_map = _get_company_map()
     lines = []
     lines.append("\n" + "="*80)
     lines.append("CSCO EXECUTIVE REPORT")
@@ -55,7 +75,12 @@ def render_cli_report(state: WorkflowState) -> str:
     # 4. RESOLVED FOCAL COMPANY
     lines.append("\n[GRAPH_FACT] FOCAL COMPANY")
     if state.focal_company_id:
-        lines.append(f"- ID: {state.focal_company_id}")
+        focal_str = str(state.focal_company_id)
+        focal_name = comp_map.get(focal_str, focal_str)
+        if focal_name != focal_str:
+            lines.append(f"- Name: {focal_name} (Code: {focal_str})")
+        else:
+            lines.append(f"- Name / ID: {focal_str}")
     else:
         lines.append("- UNRESOLVED")
 
@@ -80,7 +105,10 @@ def render_cli_report(state: WorkflowState) -> str:
     lines.append("\n[DETERMINISTIC_CALCULATION] RISK EXPOSURE")
     if state.risk_results:
         for r in state.risk_results:
-            lines.append(f"- Supplier {r.supplier_id} (Tier {r.tier})")
+            sup_str = str(r.supplier_id)
+            sup_name = comp_map.get(sup_str, sup_str)
+            label = f"{sup_name} (Code: {sup_str})" if sup_name != sup_str else sup_str
+            lines.append(f"- Supplier: {label} (Tier {r.tier})")
             lines.append(f"  Score: {r.score:.2f} | Level: {r.risk_level}")
             if r.reasons:
                 lines.append(f"  Reason: {r.reasons[0]}")
@@ -91,8 +119,11 @@ def render_cli_report(state: WorkflowState) -> str:
     lines.append("\n[RECOMMENDATION] CSCO PROPOSAL")
     if state.recommendations:
         for rec in state.recommendations:
+            target_str = str(rec.target_supplier_id)
+            target_name = comp_map.get(target_str, target_str)
+            target_label = f"{target_name} (Code: {target_str})" if target_name != target_str else target_str
             lines.append(f"- Action: {rec.action}")
-            lines.append(f"  Target: Supplier {rec.target_supplier_id}")
+            lines.append(f"  Target: {target_label}")
             if rec.reasons:
                 lines.append(f"  Rationale: {rec.reasons[0]}")
             state_val = state.pending_approvals.get(rec.recommendation_id, ApprovalState.PENDING).value

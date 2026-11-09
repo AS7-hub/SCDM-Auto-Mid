@@ -1,13 +1,58 @@
 import json
 import os
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict, Tuple
 from scdm.domain.state import WorkflowState
+
+def _load_company_dictionaries() -> Tuple[Dict[str, str], Dict[str, str], Dict[str, str], Dict[str, str]]:
+    """
+    Loads comprehensive mappings from the canonical dataset:
+    id_to_name, id_to_country, id_to_industry, id_to_type.
+    """
+    base_dir = Path(__file__).resolve().parent.parent.parent.parent
+    id_to_name = {}
+    id_to_country = {}
+    id_to_industry = {}
+    id_to_type = {}
+    
+    for p in [
+        base_dir / "all_unique_companies_and_codes.csv",
+        base_dir / "output" / "canonical" / "all_unique_companies_and_codes.csv",
+        base_dir / "output" / "canonical" / "canonical_companies.csv",
+        base_dir / "dataset" / "canonical" / "canonical_companies.csv"
+    ]:
+        if p.exists():
+            try:
+                import pandas as pd
+                df = pd.read_csv(p)
+                id_col = 'Unique Company Code' if 'Unique Company Code' in df.columns else ('company_id' if 'company_id' in df.columns else df.columns[1])
+                name_col = 'Company Name' if 'Company Name' in df.columns else ('company_name' if 'company_name' in df.columns else df.columns[0])
+                country_col = 'Country / Region' if 'Country / Region' in df.columns else ('country_region' if 'country_region' in df.columns else None)
+                industry_col = 'Industry Sector' if 'Industry Sector' in df.columns else ('industry' if 'industry' in df.columns else None)
+                type_col = 'Company Type' if 'Company Type' in df.columns else ('company_type' if 'company_type' in df.columns else None)
+                
+                for _, row in df.iterrows():
+                    cid = str(row[id_col]).strip()
+                    cname = str(row[name_col]).strip() if pd.notna(row[name_col]) else f"Private Entity ({cid})"
+                    if cname.lower() == 'nan' or not cname:
+                        cname = f"Private Entity ({cid})"
+                    id_to_name[cid] = cname
+                    if country_col and pd.notna(row[country_col]):
+                        id_to_country[cid] = str(row[country_col]).strip()
+                    if industry_col and pd.notna(row[industry_col]):
+                        id_to_industry[cid] = str(row[industry_col]).strip()
+                    if type_col and pd.notna(row[type_col]):
+                        id_to_type[cid] = str(row[type_col]).strip()
+                break
+            except Exception:
+                pass
+                
+    return id_to_name, id_to_country, id_to_industry, id_to_type
 
 def export_run_to_html(wf: WorkflowState, output_html_path: Optional[str] = None) -> str:
     """
     Exports a WorkflowState into an interactive, self-contained HTML visualizer
-    with the exact real run data baked directly into the document.
+    with real listed company names, company codes, and multi-tier network topology.
     """
     if not output_html_path:
         base_dir = Path(__file__).resolve().parent.parent.parent.parent
@@ -16,11 +61,14 @@ def export_run_to_html(wf: WorkflowState, output_html_path: Optional[str] = None
     out_path = Path(output_html_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
+    id_to_name, id_to_country, id_to_industry, id_to_type = _load_company_dictionaries()
+
     # 1. Prepare raw JSON string of the run state
     state_json = wf.model_dump_json(indent=2)
     
     # 2. Extract key display summaries
-    focal_id = wf.focal_company_id or "Focal Entity"
+    focal_code = str(wf.focal_company_id or "Focal Entity")
+    focal_name = id_to_name.get(focal_code, focal_code)
     query = wf.query or "Disruption Analysis"
     
     evt_desc = "No disruption event parsed"
@@ -37,20 +85,34 @@ def export_run_to_html(wf: WorkflowState, output_html_path: Optional[str] = None
     edges_data = []
     if wf.visualization_payload:
         for n in wf.visualization_payload.nodes:
+            nid = str(n.id)
+            cname = id_to_name.get(nid, n.label or nid)
+            # If label was already a clean name, keep it
+            if n.label and n.label != nid:
+                cname = n.label
+            country = id_to_country.get(nid, "Not Specified")
+            industry = id_to_industry.get(nid, "Not Specified")
+            ctype = id_to_type.get(nid, "Not Specified")
+
             nodes_data.append({
-                "id": n.id,
-                "label": n.label or n.id,
+                "id": nid,
+                "code": nid,
+                "name": cname,
+                "label": cname,
                 "tier": n.tier if n.tier is not None else 1,
                 "is_focal": n.is_focal,
                 "is_candidate": n.is_candidate,
                 "risk_level": n.risk_level or "EVALUATED",
                 "risk_score": n.risk_score if n.risk_score is not None else 0.0,
-                "role": n.role or ("focal_company" if n.is_focal else "supplier")
+                "role": n.role or ("focal_company" if n.is_focal else "supplier"),
+                "country": country,
+                "industry": industry,
+                "company_type": ctype
             })
         for e in wf.visualization_payload.edges:
             edges_data.append({
-                "source": e.source,
-                "target": e.target,
+                "source": str(e.source),
+                "target": str(e.target),
                 "type": e.relationship_type,
                 "is_disrupted": e.is_disrupted,
                 "is_alternative": e.is_alternative
@@ -59,16 +121,24 @@ def export_run_to_html(wf: WorkflowState, output_html_path: Optional[str] = None
     # Format paths
     paths_data = []
     for p in wf.impacted_paths:
+        route_codes = [str(x) for x in p.ordered_path]
+        route_names = [id_to_name.get(x, x) for x in route_codes]
         paths_data.append({
-            "route": p.ordered_path,
+            "route_codes": route_codes,
+            "route_names": route_names,
             "tier": p.distance if hasattr(p, "distance") else len(p.ordered_path) - 1
         })
 
     # Format risks
     risks_data = []
     for r in wf.risk_results:
+        sup_id = str(r.supplier_id)
+        sup_name = id_to_name.get(sup_id, sup_id)
         risks_data.append({
-            "supplier_id": r.supplier_id,
+            "supplier_id": sup_id,
+            "supplier_code": sup_id,
+            "supplier_name": sup_name,
+            "country": id_to_country.get(sup_id, "Not Specified"),
             "tier": r.tier,
             "score": r.score,
             "risk_level": r.risk_level,
@@ -81,9 +151,12 @@ def export_run_to_html(wf: WorkflowState, output_html_path: Optional[str] = None
         approval_val = "APPROVED"
         if wf.pending_approvals and rec.recommendation_id in wf.pending_approvals:
             approval_val = str(wf.pending_approvals[rec.recommendation_id].value if hasattr(wf.pending_approvals[rec.recommendation_id], "value") else wf.pending_approvals[rec.recommendation_id])
+        target_id = str(rec.target_supplier_id)
+        target_name = id_to_name.get(target_id, target_id)
         recs_data.append({
             "action": rec.action,
-            "target_supplier_id": rec.target_supplier_id,
+            "target_supplier_id": target_id,
+            "target_supplier_name": target_name,
             "risk_context": rec.risk_context,
             "reasons": rec.reasons,
             "approval": approval_val
@@ -92,9 +165,13 @@ def export_run_to_html(wf: WorkflowState, output_html_path: Optional[str] = None
     # Format alternatives
     alts_data = []
     for alt in wf.alternative_suppliers:
+        cand_id = str(alt.candidate_id)
+        cand_name = alt.candidate_name
+        if not cand_name or cand_name == cand_id:
+            cand_name = id_to_name.get(cand_id, cand_id)
         alts_data.append({
-            "name": alt.candidate_name,
-            "id": alt.candidate_id,
+            "name": cand_name,
+            "id": cand_id,
             "material": alt.product_or_material,
             "in_graph": alt.graph_presence,
             "score": alt.ranking_score,
@@ -102,7 +179,10 @@ def export_run_to_html(wf: WorkflowState, output_html_path: Optional[str] = None
         })
 
     payload_package = {
-        "focal": focal_id,
+        "focal": {
+            "name": focal_name,
+            "code": focal_code
+        },
         "query": query,
         "event": {
             "type": evt_type,
@@ -131,7 +211,7 @@ def export_run_to_html(wf: WorkflowState, output_html_path: Optional[str] = None
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SCDM Live Execution Visualizer - {focal_id}</title>
+  <title>SCDM Live Execution Visualizer - {focal_name}</title>
   <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
   <style>
     .node-focal {{ fill: #3b82f6; stroke: #60a5fa; stroke-width: 3.5px; filter: drop-shadow(0 0 12px rgba(59,130,246,0.7)); }}
@@ -160,36 +240,36 @@ def export_run_to_html(wf: WorkflowState, output_html_path: Optional[str] = None
     <div>
       <div class="flex items-center gap-2">
         <span class="px-2.5 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-          LIVE TERMINAL RUN RESULTS
+          LIVE EXECUTION VISUALIZER
         </span>
-        <span class="text-xs px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 font-mono">
-          Focal Anchor: {focal_id}
+        <span class="text-xs px-2.5 py-0.5 rounded bg-blue-500/20 text-blue-300 font-mono font-bold">
+          Focal: {focal_name} (Code: {focal_code})
         </span>
       </div>
       <h1 class="text-2xl md:text-3xl font-extrabold tracking-tight mt-1 text-white">
         Supply Chain Network & Disruption Visualizer
       </h1>
       <p class="text-xs md:text-sm text-gray-400 mt-0.5">
-        Query: <span class="text-cyan-300 font-medium">"{query}"</span>
+        Disruption Query: <span class="text-cyan-300 font-medium">"{query}"</span>
       </p>
     </div>
 
     <!-- Live Execution Metrics Badges -->
     <div class="flex flex-wrap items-center gap-2 text-xs font-mono">
-      <div class="p-2 rounded-lg bg-[#1e293b] border border-white/5 text-center">
+      <div class="p-2 rounded-lg bg-[#1e293b] border border-white/5 text-center min-w-[70px]">
         <span class="text-[10px] text-gray-400 block uppercase">Paths</span>
         <span class="font-bold text-white text-sm">{len(paths_data)}</span>
       </div>
-      <div class="p-2 rounded-lg bg-[#1e293b] border border-white/5 text-center">
-        <span class="text-[10px] text-gray-400 block uppercase">Network Nodes</span>
+      <div class="p-2 rounded-lg bg-[#1e293b] border border-white/5 text-center min-w-[70px]">
+        <span class="text-[10px] text-gray-400 block uppercase">Nodes</span>
         <span class="font-bold text-cyan-400 text-sm">{len(nodes_data)}</span>
       </div>
-      <div class="p-2 rounded-lg bg-[#1e293b] border border-white/5 text-center">
-        <span class="text-[10px] text-gray-400 block uppercase">Network Edges</span>
+      <div class="p-2 rounded-lg bg-[#1e293b] border border-white/5 text-center min-w-[70px]">
+        <span class="text-[10px] text-gray-400 block uppercase">Edges</span>
         <span class="font-bold text-cyan-400 text-sm">{len(edges_data)}</span>
       </div>
-      <div class="p-2 rounded-lg bg-[#1e293b] border border-white/5 text-center">
-        <span class="text-[10px] text-gray-400 block uppercase">Scored Risks</span>
+      <div class="p-2 rounded-lg bg-[#1e293b] border border-white/5 text-center min-w-[70px]">
+        <span class="text-[10px] text-gray-400 block uppercase">Risks</span>
         <span class="font-bold text-amber-400 text-sm">{len(risks_data)}</span>
       </div>
     </div>
@@ -199,7 +279,7 @@ def export_run_to_html(wf: WorkflowState, output_html_path: Optional[str] = None
   <div class="max-w-7xl mx-auto w-full mb-6 flex items-center gap-2 border-b border-[#1e293b] pb-2 text-xs font-semibold">
     <button id="tab-network" onclick="switchView('network')" class="view-btn active px-4 py-2 rounded-lg border border-[#334155] transition-all flex items-center gap-2">
       <span>🌐</span>
-      <span>Live Supply Chain Network ({len(nodes_data)} Nodes)</span>
+      <span>Supply Chain Network ({len(nodes_data)} Companies)</span>
     </button>
     <button id="tab-risks" onclick="switchView('risks')" class="view-btn px-4 py-2 rounded-lg border border-[#334155] bg-[#1e293b] text-gray-400 transition-all flex items-center gap-2">
       <span>🎯</span>
@@ -222,18 +302,18 @@ def export_run_to_html(wf: WorkflowState, output_html_path: Optional[str] = None
     <div class="lg:col-span-8 flex flex-col bg-[#131d31] border border-[#1e293b] rounded-2xl p-4 shadow-xl">
       <div class="flex items-center justify-between mb-3 border-b border-white/5 pb-2 text-xs font-medium">
         <div class="flex flex-wrap items-center gap-3">
-          <span class="text-white font-bold flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-blue-500"></span> Focal ({focal_id})</span>
-          <span class="text-red-400 flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-red-500"></span> High Risk</span>
-          <span class="text-orange-400 flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-orange-500"></span> Medium Risk</span>
-          <span class="text-yellow-400 flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-yellow-500"></span> Low Risk</span>
+          <span class="text-white font-bold flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-blue-500"></span> Focal Company</span>
+          <span class="text-red-400 flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-red-500"></span> High Risk T1</span>
+          <span class="text-orange-400 flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-orange-500"></span> Medium Risk T1</span>
+          <span class="text-yellow-400 flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-yellow-500"></span> Low Risk T1</span>
           <span class="text-purple-400 flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-purple-500"></span> Tier 2</span>
           <span class="text-emerald-400 flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-emerald-500"></span> Alternative</span>
         </div>
 
         <div class="flex items-center gap-2">
-          <input type="text" id="search-input" onkeyup="filterNodes(this.value)" placeholder="Search company..." class="bg-black/40 border border-white/10 text-xs px-2.5 py-1 rounded-lg text-white focus:outline-none focus:ring-1 focus:ring-blue-500">
+          <input type="text" id="search-input" onkeyup="filterNodes(this.value)" placeholder="Search company name or code..." class="bg-black/40 border border-white/10 text-xs px-2.5 py-1 rounded-lg text-white focus:outline-none focus:ring-1 focus:ring-blue-500 w-48">
           <button onclick="resetGraph()" class="px-2.5 py-1 rounded bg-black/40 hover:bg-black/60 text-xs font-mono text-gray-300 border border-white/10">
-            Center
+            Reset
           </button>
         </div>
       </div>
@@ -255,8 +335,8 @@ def export_run_to_html(wf: WorkflowState, output_html_path: Optional[str] = None
       </div>
 
       <div class="mt-2 text-[11px] text-gray-400 flex justify-between">
-        <span>Click any node to inspect metadata. Showing real topology generated by this run.</span>
-        <span class="font-mono text-cyan-300">Run: {focal_id}</span>
+        <span>Click any node circle to inspect full company details and metrics.</span>
+        <span class="font-mono text-cyan-300">Anchor: {focal_name} ({focal_code})</span>
       </div>
     </div>
 
@@ -265,11 +345,11 @@ def export_run_to_html(wf: WorkflowState, output_html_path: Optional[str] = None
       <div class="bg-[#1e293b] border border-[#334155] rounded-2xl p-5 shadow-sm">
         <div class="flex items-center justify-between border-b border-[#334155] pb-3 mb-3">
           <div>
-            <span id="insp-tier-tag" class="text-[10px] font-mono px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 uppercase">
+            <span id="insp-tier-tag" class="text-[10px] font-mono px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 uppercase font-bold">
               Focal Anchor
             </span>
             <h3 id="insp-name" class="text-base font-bold text-white mt-1">
-              {focal_id}
+              {focal_name}
             </h3>
           </div>
           <span id="insp-pill" class="text-xs font-mono font-bold px-2 py-1 rounded bg-blue-500/20 text-blue-300">
@@ -279,8 +359,16 @@ def export_run_to_html(wf: WorkflowState, output_html_path: Optional[str] = None
 
         <div class="space-y-2 text-xs">
           <div class="flex justify-between py-1 border-b border-white/5">
-            <span class="text-gray-400">Node Identifier:</span>
-            <span id="insp-id" class="font-mono text-gray-200">{focal_id}</span>
+            <span class="text-gray-400">Unique Company Code:</span>
+            <span id="insp-code" class="font-mono font-bold text-cyan-300">{focal_code}</span>
+          </div>
+          <div class="flex justify-between py-1 border-b border-white/5">
+            <span class="text-gray-400">Country / Region:</span>
+            <span id="insp-country" class="font-sans text-gray-200">Not Specified</span>
+          </div>
+          <div class="flex justify-between py-1 border-b border-white/5">
+            <span class="text-gray-400">Industry Sector:</span>
+            <span id="insp-industry" class="font-sans text-gray-200">Automobiles & Components</span>
           </div>
           <div class="flex justify-between py-1 border-b border-white/5">
             <span class="text-gray-400">Network Tier:</span>
@@ -301,7 +389,7 @@ def export_run_to_html(wf: WorkflowState, output_html_path: Optional[str] = None
       <div class="bg-[#1e293b] border border-[#334155] rounded-2xl p-5 shadow-sm flex-grow">
         <h4 class="text-xs font-bold uppercase text-white mb-2 flex items-center justify-between">
           <span>CSCO Action & Governance</span>
-          <span class="text-[10px] px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 font-mono">Agent 6</span>
+          <span class="text-[10px] px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 font-mono">Agent 6 (LLM)</span>
         </h4>
         <div class="space-y-2 text-xs text-gray-300">
           <div class="p-2.5 rounded bg-black/40 border border-white/5">
@@ -310,7 +398,8 @@ def export_run_to_html(wf: WorkflowState, output_html_path: Optional[str] = None
           </div>
           <div class="p-2.5 rounded bg-black/40 border border-white/5">
             <span class="text-[10px] uppercase text-gray-400 block mb-0.5">Target Supplier</span>
-            <span class="font-mono text-cyan-300">{recs_data[0]["target_supplier_id"] if recs_data else (risks_data[0]["supplier_id"] if risks_data else "N/A")}</span>
+            <span class="font-sans font-bold text-white block">{recs_data[0]["target_supplier_name"] if recs_data else (risks_data[0]["supplier_name"] if risks_data else "N/A")}</span>
+            <span class="font-mono text-cyan-300 text-[11px]">Code: {recs_data[0]["target_supplier_id"] if recs_data else (risks_data[0]["supplier_code"] if risks_data else "N/A")}</span>
           </div>
           <div class="p-2.5 rounded bg-black/40 border border-white/5 flex justify-between items-center">
             <span class="text-gray-400">Approval State:</span>
@@ -327,8 +416,8 @@ def export_run_to_html(wf: WorkflowState, output_html_path: Optional[str] = None
     <div class="bg-[#1e293b] border border-[#334155] rounded-2xl p-6 shadow-sm">
       <div class="flex items-center justify-between border-b border-white/10 pb-3 mb-4">
         <div>
-          <h3 class="text-base font-bold text-white">Topological Risk Score Table</h3>
-          <p class="text-xs text-gray-400">Evaluated deterministically across graph paths using 5-factor topological formula.</p>
+          <h3 class="text-base font-bold text-white">Topological Risk Score Table (Listed Company Names & Unique Codes)</h3>
+          <p class="text-xs text-gray-400">Evaluated deterministically across graph paths using the 5-factor topological formula.</p>
         </div>
         <span class="text-xs font-mono px-2.5 py-1 rounded bg-emerald-500/20 text-emerald-300 font-bold">
           {len(risks_data)} Scored Suppliers
@@ -339,20 +428,22 @@ def export_run_to_html(wf: WorkflowState, output_html_path: Optional[str] = None
         <table class="w-full text-left text-xs">
           <thead>
             <tr class="border-b border-white/10 text-gray-400 uppercase font-mono text-[10px]">
-              <th class="py-2.5 px-3">Supplier ID / Name</th>
+              <th class="py-2.5 px-3">Listed Company Name</th>
+              <th class="py-2.5 px-3">Unique Company Code</th>
               <th class="py-2.5 px-3">Tier</th>
               <th class="py-2.5 px-3">Risk Score</th>
               <th class="py-2.5 px-3">Risk Level</th>
-              <th class="py-2.5 px-3">Mathematical Reasons</th>
+              <th class="py-2.5 px-3">Topological Reasons</th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-white/5 font-mono">
+          <tbody class="divide-y divide-white/5">
             {"".join([f'''
             <tr class="hover:bg-white/5 transition-colors">
-              <td class="py-2.5 px-3 font-bold text-white">{r["supplier_id"]}</td>
-              <td class="py-2.5 px-3 text-gray-300">Tier {r["tier"]}</td>
-              <td class="py-2.5 px-3 font-bold text-cyan-300">{r["score"]:.2f} / 1.00</td>
-              <td class="py-2.5 px-3">
+              <td class="py-2.5 px-3 font-bold text-white font-sans">{r["supplier_name"]}</td>
+              <td class="py-2.5 px-3 font-mono text-cyan-300 font-bold">{r["supplier_code"]}</td>
+              <td class="py-2.5 px-3 text-gray-300 font-mono">Tier {r["tier"]}</td>
+              <td class="py-2.5 px-3 font-bold text-cyan-300 font-mono">{r["score"]:.2f} / 1.00</td>
+              <td class="py-2.5 px-3 font-mono">
                 <span class="px-2 py-0.5 rounded text-[10px] font-bold {'bg-red-500/20 text-red-300' if r['risk_level']=='HIGH' else ('bg-orange-500/20 text-orange-300' if r['risk_level']=='MEDIUM' else 'bg-yellow-500/20 text-yellow-300')}">
                   {r["risk_level"]}
                 </span>
@@ -371,8 +462,8 @@ def export_run_to_html(wf: WorkflowState, output_html_path: Optional[str] = None
     <div class="bg-[#1e293b] border border-[#334155] rounded-2xl p-6 shadow-sm">
       <div class="flex items-center justify-between border-b border-white/10 pb-3 mb-4">
         <div>
-          <h3 class="text-base font-bold text-white">Traversed Upstream Supply Routes</h3>
-          <p class="text-xs text-gray-400">Full path chains traced from upstream suppliers into {focal_id}.</p>
+          <h3 class="text-base font-bold text-white">Traversed Upstream Supply Routes (Company Names & Unique Codes)</h3>
+          <p class="text-xs text-gray-400">Full path chains traced from upstream suppliers into {focal_name} (Code: {focal_code}).</p>
         </div>
         <span class="text-xs font-mono px-2.5 py-1 rounded bg-blue-500/20 text-blue-300 font-bold">
           {len(paths_data)} Total Paths
@@ -382,12 +473,12 @@ def export_run_to_html(wf: WorkflowState, output_html_path: Optional[str] = None
       <div class="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[600px] overflow-y-auto pr-2 text-xs">
         {"".join([f'''
         <div class="p-3 rounded-xl bg-black/40 border border-white/5 space-y-1">
-          <div class="flex justify-between items-center text-[10px] font-mono text-gray-400">
+          <div class="flex justify-between items-center text-[10px] font-mono text-gray-400 mb-1">
             <span class="text-cyan-400 font-bold">Path #{i+1}</span>
             <span>Distance: Tier {p["tier"]}</span>
           </div>
-          <div class="text-gray-200 font-sans break-words">
-            {" ──► ".join(p["route"])}
+          <div class="text-gray-200 font-sans break-words leading-relaxed">
+            {" ──► ".join([f'<span class="font-semibold text-white">{name}</span> <span class="text-[10px] text-gray-400 font-mono">({code})</span>' for name, code in zip(p["route_names"], p["route_codes"])])}
           </div>
         </div>
         ''' for i, p in enumerate(paths_data)])}
@@ -430,17 +521,20 @@ def export_run_to_html(wf: WorkflowState, output_html_path: Optional[str] = None
       // Filter nodes if search query present
       let displayNodes = RUN_DATA.nodes;
       if (filterText.trim()) {{
+        const ft = filterText.toLowerCase();
         displayNodes = displayNodes.filter(n => 
-          (n.label || n.id).toLowerCase().includes(filterText.toLowerCase()) || n.is_focal
+          (n.name || '').toLowerCase().includes(ft) ||
+          (n.code || '').toLowerCase().includes(ft) ||
+          n.is_focal
         );
       }}
 
-      // Limit dense rendering to 80 primary nodes on canvas for performance/clarity
-      const visibleSet = new Set(displayNodes.slice(0, 80).map(n => n.id));
-      visibleSet.add(RUN_DATA.focal);
+      // Limit dense rendering to 75 primary nodes on canvas for performance/clarity
+      const visibleSet = new Set(displayNodes.slice(0, 75).map(n => n.id));
+      visibleSet.add(RUN_DATA.focal.code);
 
       const posMap = {{}};
-      posMap[RUN_DATA.focal] = {{ x: cx, y: cy }};
+      posMap[RUN_DATA.focal.code] = {{ x: cx, y: cy }};
 
       const t1 = displayNodes.filter(n => n.tier === 1 && !n.is_focal && visibleSet.has(n.id));
       const t2 = displayNodes.filter(n => n.tier === 2 && visibleSet.has(n.id));
@@ -450,12 +544,12 @@ def export_run_to_html(wf: WorkflowState, output_html_path: Optional[str] = None
       // Radial positioning
       t1.forEach((n, i) => {{
         const angle = (i / Math.max(1, t1.length)) * 2 * Math.PI;
-        posMap[n.id] = {{ x: cx + 150 * Math.cos(angle), y: cy + 150 * Math.sin(angle) }};
+        posMap[n.id] = {{ x: cx + 155 * Math.cos(angle), y: cy + 155 * Math.sin(angle) }};
       }});
 
       t2.forEach((n, i) => {{
         const angle = (i / Math.max(1, t2.length)) * 2 * Math.PI + 0.2;
-        posMap[n.id] = {{ x: cx + 230 * Math.cos(angle), y: cy + 230 * Math.sin(angle) }};
+        posMap[n.id] = {{ x: cx + 235 * Math.cos(angle), y: cy + 235 * Math.sin(angle) }};
       }});
 
       t3.forEach((n, i) => {{
@@ -496,10 +590,10 @@ def export_run_to_html(wf: WorkflowState, output_html_path: Optional[str] = None
         circle.setAttribute('cx', p.x);
         circle.setAttribute('cy', p.y);
 
-        let r = 10;
+        let r = 11;
         let cls = 'node-t2';
         if (n.is_focal) {{
-          r = 20;
+          r = 21;
           cls = 'node-focal';
         }} else if (n.is_candidate) {{
           r = 13;
@@ -519,12 +613,15 @@ def export_run_to_html(wf: WorkflowState, output_html_path: Optional[str] = None
 
         const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
         text.setAttribute('x', p.x);
-        text.setAttribute('y', p.y + r + 11);
+        text.setAttribute('y', p.y + r + 12);
         text.setAttribute('text-anchor', 'middle');
         text.setAttribute('fill', '#e2e8f0');
         text.setAttribute('font-size', n.is_focal ? '12px' : '9px');
         text.setAttribute('font-weight', n.is_focal ? 'bold' : 'normal');
-        text.textContent = (n.label || n.id).substring(0, 16);
+        
+        // Show clean company name
+        const displayName = (n.name || n.label || n.id);
+        text.textContent = displayName.length > 17 ? displayName.substring(0, 15) + '..' : displayName;
 
         g.appendChild(circle);
         g.appendChild(text);
@@ -533,8 +630,13 @@ def export_run_to_html(wf: WorkflowState, output_html_path: Optional[str] = None
     }}
 
     function selectNode(n) {{
-      document.getElementById('insp-name').innerText = n.label || n.id;
-      document.getElementById('insp-id').innerText = n.id;
+      const compName = n.name || n.label || n.id;
+      const compCode = n.code || n.id;
+      
+      document.getElementById('insp-name').innerText = compName;
+      document.getElementById('insp-code').innerText = compCode;
+      document.getElementById('insp-country').innerText = n.country || "Not Specified";
+      document.getElementById('insp-industry').innerText = n.industry || "Not Specified";
       document.getElementById('insp-tier').innerText = n.is_focal ? "Tier 0 (Root)" : `Tier ${{n.tier || 1}}`;
       document.getElementById('insp-tier-tag').innerText = n.is_focal ? "Focal Anchor" : `Tier ${{n.tier || 1}} Supplier`;
       

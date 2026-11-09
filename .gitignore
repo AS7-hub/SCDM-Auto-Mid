@@ -27,6 +27,7 @@ htmlcov/
 # Local cache & reports
 cache/
 reports/
+output/runs/
 
 # IDE & OS files
 .vscode/

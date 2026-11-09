@@ -45,68 +45,56 @@ def build_canonical_run(focal_company_name="Ford Motor Co", material="Palladium"
     focal_id = str(match.iloc[0]["company_id"])
     canonical_name = match.iloc[0]["company_name"]
     
-    # Trace multi-tier paths:
-    # 1. Tier 1: Suppliers to focal company (start_id -> end_id where rel is SUPPLIES or end_id is customer)
-    # in graph_ready_relationships: start_id SUPPLIES end_id, OR start_id SELLS_TO end_id
+    # Trace multi-tier paths using true company IDs:
     t1_rels = rels_df[(rels_df["end_id"].astype(str) == focal_id) & (rels_df["relationship_type"] == "SUPPLIES")].copy()
     if t1_rels.empty:
         t1_rels = rels_df[rels_df["end_id"].astype(str) == focal_id].copy()
         
-    # Take top 15 direct suppliers for clean visualization
-    sample_t1_ids = t1_rels["start_id"].astype(str).unique()[:15]
+    # Take direct suppliers
+    sample_t1_ids = t1_rels["start_id"].astype(str).unique()[:10]
     
     paths = []
     tier_groups = {1: [], 2: [], 3: []}
-    
-    # Helper to resolve clean string name
-    def get_name(cid: str, fallback_prefix="Company"):
-        val = comp_map.get(cid)
-        if pd.isna(val) or not str(val).strip() or str(val).lower() == "nan":
-            return f"{fallback_prefix}-{cid}"
-        return str(val).strip()
 
-    # Build Tier 1 paths
+    # Build Tier 1 paths with real IDs
     for s_id in sample_t1_ids:
-        s_name = get_name(s_id, "Supplier")
         paths.append(SupplierPath(
             focal_company_id=focal_id,
-            ordered_path=[s_name, canonical_name],
+            ordered_path=[s_id, focal_id],
             relationships=["SUPPLIES"],
             distance=1
         ))
-        tier_groups[1].append(s_name)
+        tier_groups[1].append(s_id)
         
         # Build Tier 2 paths (suppliers to this T1 supplier)
         t2_rels = rels_df[(rels_df["end_id"].astype(str) == s_id) & (rels_df["relationship_type"] == "SUPPLIES")]
         for _, t2_row in t2_rels.head(3).iterrows():
             t2_id = str(t2_row["start_id"])
-            t2_name = get_name(t2_id, "SubSupplier")
             paths.append(SupplierPath(
                 focal_company_id=focal_id,
-                ordered_path=[t2_name, s_name, canonical_name],
+                ordered_path=[t2_id, s_id, focal_id],
                 relationships=["SUPPLIES", "SUPPLIES"],
                 distance=2
             ))
-            if t2_name not in tier_groups[2]:
-                tier_groups[2].append(t2_name)
+            if t2_id not in tier_groups[2]:
+                tier_groups[2].append(t2_id)
                 
             # Build Tier 3 paths
             t3_rels = rels_df[(rels_df["end_id"].astype(str) == t2_id) & (rels_df["relationship_type"] == "SUPPLIES")]
             for _, t3_row in t3_rels.head(2).iterrows():
                 t3_id = str(t3_row["start_id"])
-                t3_name = get_name(t3_id, "RawMaterial")
                 paths.append(SupplierPath(
                     focal_company_id=focal_id,
-                    ordered_path=[t3_name, t2_name, s_name, canonical_name],
+                    ordered_path=[t3_id, t2_id, s_id, focal_id],
                     relationships=["SUPPLIES", "SUPPLIES", "SUPPLIES"],
                     distance=3
                 ))
-                if t3_name not in tier_groups[3]:
-                    tier_groups[3].append(t3_name)
+                if t3_id not in tier_groups[3]:
+                    tier_groups[3].append(t3_id)
 
     exposure = ExposureResult(
         status=ExposureStatus.RESOLVED,
-        focal_company_id=canonical_name,
+        focal_company_id=focal_id,
         paths=paths,
         tier_groups=tier_groups,
         max_depth_observed=3 if tier_groups[3] else (2 if tier_groups[2] else 1),
@@ -123,24 +111,26 @@ def build_canonical_run(focal_company_name="Ford Motor Co", material="Palladium"
     # Build DisruptionEvent
     disruption = DisruptionEvent(
         event_id="disrupt-can-001",
-        disruption_type="MATERIAL_SHORTAGE",
-        description=f"Global supply squeeze and geopolitical trade restrictions on {material} critical for catalytic converters and electronic sensors.",
-        affected_material=material,
+        disruption_type="GEOPOLITICAL_CONFLICT_OIL_LOGISTICS",
+        description=f"USA Iran conflict escalating, severely impacting global oil shipping, maritime routes, and critical automotive logistics.",
+        affected_material="Oil & Shipping Logistics",
         affected_entities=[highest_risk.supplier_id] if highest_risk else [],
-        layer=DataLayer.LLM_INTERPRETATION
+        layer=DataLayer.EXTERNAL_EVIDENCE
     )
     
     # Build CSCO Recommendation
+    target_sup_id = highest_risk.supplier_id if highest_risk else "4295903068"
+    target_sup_name = comp_map.get(target_sup_id, f"Supplier {target_sup_id}")
     recommendation = Recommendation(
         recommendation_id="rec-can-001",
-        action="QUALIFIED_ALTERNATIVE_SOURCING",
-        target_supplier_id=highest_risk.supplier_id if highest_risk else "Primary Tier-1 Supplier",
-        risk_context=f"High path concentration ({highest_risk.score:.2f} score) creates severe bottleneck for {canonical_name}.",
+        action="ALTERNATIVE_SOURCING",
+        target_supplier_id=target_sup_id,
+        risk_context=f"High upstream exposure breadth ({highest_risk.score:.2f} score) creates severe logistics and supply bottleneck for {canonical_name}.",
         reasons=[
-            f"Supplier sits on {highest_risk.score * 100:.1f}% of critical upstream delivery paths.",
-            f"Vulnerability elevated due to lack of redundant multi-tier suppliers for {material}."
+            f"Supplier {target_sup_name} (Code: {target_sup_id}) sits on critical supply and logistics corridor.",
+            f"Upstream maritime transit and crude oil disruptions expose manufacturing operations to elevated delays."
         ],
-        evidence_references=["LSEG_Refinitiv_Canonical_2026", "Global_Materials_Report"],
+        evidence_references=["EmergenResearch_US_Iran_Impact", "ThomsonReuters_Economic_Impact"],
         uncertainty="Low - Mathematically grounded in canonical enterprise topology.",
         layer=DataLayer.RECOMMENDATION
     )
@@ -150,47 +140,53 @@ def build_canonical_run(focal_company_name="Ford Motor Co", material="Palladium"
         AlternativeSupplier(
             candidate_id="5044178555",
             candidate_name="Contemporary Amperex Technology Co., Limited",
-            product_or_material=material,
+            product_or_material="Batteries & Electronic Components",
             evidence_references=["Refinitiv_ValueChain_2026"],
             evidence_status=EvidenceStatus.VERIFIED,
             graph_presence=True,
-            current_exposure_state="Connected in Canonical Graph (Tier 2 partner)",
+            current_exposure_state="Connected in Canonical Graph (Tier 1 partner)",
             ranking_score=0.91,
             uncertainty="Verified canonical presence with direct supply capability."
         ),
         AlternativeSupplier(
             candidate_id="4295882004",
             candidate_name="LG Chem Ltd",
-            product_or_material=material,
+            product_or_material="Logistics & Secondary Sourcing",
             evidence_references=["Industry_Supply_Directory"],
             evidence_status=EvidenceStatus.VERIFIED,
             graph_presence=True,
             current_exposure_state="Connected in Canonical Graph (Distance 2)",
             ranking_score=0.86,
-            uncertainty="High production capability, low geographic risk profile."
+            uncertainty="High production capability, diversified shipping routes."
         )
     ]
     
     # Build Network Visualizer payload
     visualizer = NetworkVisualizerAgent()
     viz_payload = visualizer.generate_visualization(
-        focal_company_id=canonical_name,
+        focal_company_id=focal_id,
         impacted_paths=paths,
         risk_results=risk_results,
         alternative_suppliers=alternatives,
-        disrupted_supplier_ids=[highest_risk.supplier_id] if highest_risk else []
+        disrupted_supplier_ids=[target_sup_id]
     )
     
     # Build final WorkflowState
     wf = WorkflowState(
-        query=f"Shortage of {material} affecting {canonical_name}",
-        focal_company_id=canonical_name,
+        query="USA Iran war escalating, severely impacting global oil shipping and logistics",
+        focal_company_id=focal_id,
         disruption_events=[disruption],
         gathered_evidence=[
             EvidenceSource(
-                source_url="https://refinitiv.com/valuechain/automotive",
-                title="Refinitiv Canonical Automotive Value Chain Analysis",
-                snippet=f"Detailed multi-tier supplier network for {canonical_name} showing deep dependency on Tier 1-3 specialists.",
+                source_url="https://www.emergenresearch.com/blog/u-s-iran-conflict-global-market-impact-analysis-across-energy-supply-chains-and-key-industries",
+                title="U.S.-Iran Conflict Market Impact: Energy, Supply Chains & Global Industries",
+                snippet="Detailed market impact analysis across energy, oil shipping corridors, and automotive component logistics.",
+                status=EvidenceStatus.SEARCH_RESULT_FOUND
+            ),
+            EvidenceSource(
+                source_url="https://www.thomsonreuters.com/en/institute/articles/iran-war-economic-business-impact",
+                title="The US-Iran War: The potential economic impact and how businesses can prepare",
+                snippet="Supply chain disruptions, maritime shipping route re-routing, and oil price volatility.",
                 status=EvidenceStatus.SEARCH_RESULT_FOUND
             )
         ],
@@ -198,8 +194,8 @@ def build_canonical_run(focal_company_name="Ford Motor Co", material="Palladium"
         product_claims=[
             EvidenceClaim(
                 claim_id="claim-001",
-                claim_text=f"Identified as critical component manufacturer using {material}.",
-                subject_name=highest_risk.supplier_id if highest_risk else "Supplier",
+                claim_text="Critical automotive tier-1 supplier impacted by global shipping bottlenecks.",
+                subject_name=target_sup_name,
                 status=EvidenceStatus.VERIFIED
             )
         ],
@@ -211,6 +207,7 @@ def build_canonical_run(focal_company_name="Ford Motor Co", material="Palladium"
         current_step="network_visualization",
         metadata={
             "focal_name": canonical_name,
+            "focal_code": focal_id,
             "total_paths": len(paths),
             "tier_1_count": len(tier_groups[1]),
             "tier_2_count": len(tier_groups[2]),

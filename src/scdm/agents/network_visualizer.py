@@ -19,8 +19,30 @@ class NetworkVisualizerAgent:
     Generates a deterministic, serializable subgraph payload based purely on 
     the authoritative output of the graph traversal and risk engine.
     """
-    def __init__(self):
-        pass
+    def __init__(self, company_map: dict = None):
+        if company_map is not None:
+            self.company_map = company_map
+        else:
+            self.company_map = self._load_company_map()
+
+    def _load_company_map(self) -> dict:
+        try:
+            from pathlib import Path
+            import pandas as pd
+            base_dir = Path(__file__).resolve().parent.parent.parent.parent
+            for p in [
+                base_dir / "all_unique_companies_and_codes.csv",
+                base_dir / "output" / "canonical" / "canonical_companies.csv",
+                base_dir / "dataset" / "canonical" / "canonical_companies.csv"
+            ]:
+                if p.exists():
+                    df = pd.read_csv(p)
+                    id_col = 'Unique Company Code' if 'Unique Company Code' in df.columns else 'company_id'
+                    name_col = 'Company Name' if 'Company Name' in df.columns else 'company_name'
+                    return dict(zip(df[id_col].astype(str), df[name_col].fillna("Company-" + df[id_col].astype(str))))
+        except Exception:
+            pass
+        return {}
 
     def generate_visualization(
         self,
@@ -39,9 +61,11 @@ class NetworkVisualizerAgent:
         
         # 2. Add Focal Company
         if focal_company_id:
-            nodes[focal_company_id] = VisualNode(
-                id=focal_company_id,
-                label=focal_company_id,
+            focal_str = str(focal_company_id)
+            focal_label = self.company_map.get(focal_str, focal_str)
+            nodes[focal_str] = VisualNode(
+                id=focal_str,
+                label=focal_label,
                 is_focal=True,
                 role="focal_company",
                 tier=0
@@ -56,14 +80,16 @@ class NetworkVisualizerAgent:
             # The path is ordered from source (supplier) to target (focal company)
             # The distance from focal company can be inferred by position from the end
             for i, node_id in enumerate(path_nodes):
-                if node_id not in nodes:
+                node_str = str(node_id)
+                if node_str not in nodes:
                     tier = len(path_nodes) - 1 - i
-                    risk_level = risk_map[node_id].risk_level if node_id in risk_map else None
-                    risk_score = risk_map[node_id].score if node_id in risk_map else None
+                    risk_level = risk_map[node_str].risk_level if node_str in risk_map else None
+                    risk_score = risk_map[node_str].score if node_str in risk_map else None
+                    node_label = self.company_map.get(node_str, node_str)
                     
-                    nodes[node_id] = VisualNode(
-                        id=node_id,
-                        label=node_id, # Can be enhanced if we had names in path
+                    nodes[node_str] = VisualNode(
+                        id=node_str,
+                        label=node_label,
                         tier=tier,
                         role="supplier" if tier > 0 else "focal_company",
                         risk_level=risk_level,

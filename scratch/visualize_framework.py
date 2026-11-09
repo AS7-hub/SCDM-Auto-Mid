@@ -206,6 +206,19 @@ def simulate_step_by_step():
     wf.visualization_payload = payload
     print(f"    {GREEN}✓ Visualization Payload Compiled:{RESET} {len(payload.nodes)} nodes, {len(payload.edges)} edges\n")
 
+def _load_company_map(base_dir: Path):
+    dict_file = base_dir / "all_unique_companies_and_codes.csv"
+    id_to_name = {}
+    if dict_file.exists():
+        try:
+            import pandas as pd
+            df = pd.read_csv(dict_file)
+            for _, r in df.iterrows():
+                id_to_name[str(r["Unique Company Code"]).strip()] = str(r["Company Name"]).strip()
+        except Exception:
+            pass
+    return id_to_name
+
 def display_latest_demo_run(run_file_path=None):
     base_dir = Path(__file__).resolve().parent.parent
     if not run_file_path:
@@ -227,9 +240,19 @@ def display_latest_demo_run(run_file_path=None):
         print(f"{RED}Error reading run file: {e}{RESET}")
         return
 
+    id_to_name = _load_company_map(base_dir)
+
+    def format_entity(cid):
+        s_id = str(cid).strip()
+        name = id_to_name.get(s_id)
+        if name and name != s_id:
+            return f"{name} ({s_id})"
+        return s_id
+
     # Extract high level run info
     query = data.get("query", "Unknown Query")
     focal_id = data.get("focal_company_id", "Unknown")
+    focal_display = format_entity(focal_id)
     events = data.get("disruption_events", [])
     paths = data.get("impacted_paths", [])
     risks = data.get("risk_results", [])
@@ -240,7 +263,7 @@ def display_latest_demo_run(run_file_path=None):
     edges = viz.get("edges", []) if isinstance(viz, dict) else []
 
     print(f"{BOLD}Scenario Query:{RESET}        {CYAN}{query}{RESET}")
-    print(f"{BOLD}Focal Company Anchor:{RESET}  {GREEN}{focal_id}{RESET}")
+    print(f"{BOLD}Focal Company Anchor:{RESET}  {GREEN}{focal_display}{RESET}")
     if events:
         evt = events[0]
         print(f"{BOLD}Disruption Detected:{RESET}   {RED}{evt.get('disruption_type')} - {evt.get('affected_material')}{RESET}")
@@ -264,7 +287,7 @@ def display_latest_demo_run(run_file_path=None):
 
     print(f"  {BOLD}Tier 1 Paths ({len(tier_1_paths)} direct routes):{RESET}")
     for p in tier_1_paths[:6]:
-        route = " ──[SUPPLIES]──► ".join(p.get("ordered_path", []))
+        route = " ──[SUPPLIES]──► ".join([format_entity(x) for x in p.get("ordered_path", [])])
         print(f"    • {route}")
     if len(tier_1_paths) > 6:
         print(f"    {DIM}... and {len(tier_1_paths) - 6} more Tier 1 paths{RESET}")
@@ -272,7 +295,7 @@ def display_latest_demo_run(run_file_path=None):
     if tier_2_paths:
         print(f"\n  {BOLD}Tier 2 Paths ({len(tier_2_paths)} secondary routes):{RESET}")
         for p in tier_2_paths[:6]:
-            route = " ──► ".join(p.get("ordered_path", []))
+            route = " ──► ".join([format_entity(x) for x in p.get("ordered_path", [])])
             print(f"    • {route}")
         if len(tier_2_paths) > 6:
             print(f"    {DIM}... and {len(tier_2_paths) - 6} more Tier 2 paths{RESET}")
@@ -280,29 +303,31 @@ def display_latest_demo_run(run_file_path=None):
     if tier_3_paths:
         print(f"\n  {BOLD}Tier 3 Paths ({len(tier_3_paths)} deep tier routes):{RESET}")
         for p in tier_3_paths[:4]:
-            route = " ──► ".join(p.get("ordered_path", []))
+            route = " ──► ".join([format_entity(x) for x in p.get("ordered_path", [])])
             print(f"    • {route}")
         if len(tier_3_paths) > 4:
             print(f"    {DIM}... and {len(tier_3_paths) - 4} more Tier 3 paths{RESET}")
 
     # Display Top Risk-Scored Suppliers
     print(f"\n{BOLD}{CYAN}🎯 DETERMINISTIC RISK SCORES (TOP EXPOSED SUPPLIERS){RESET}")
-    print(f"{'Supplier / Entity':<40} | {'Tier':<6} | {'Risk Score':<12} | {'Risk Level'}")
+    print(f"{'Company Name & Code':<48} | {'Tier':<6} | {'Risk Score':<12} | {'Risk Level'}")
     print("-" * 80)
     for r in sorted(risks, key=lambda x: x.get("score", 0), reverse=True)[:8]:
-        sup = r.get("supplier_id", "Unknown")[:38]
+        sup_raw = str(r.get("supplier_id", "Unknown"))
+        sup_formatted = format_entity(sup_raw)[:46]
         tier = f"Tier {r.get('tier', 1)}"
         score = f"{r.get('score', 0):.2f} / 1.00"
         lvl = r.get("risk_level", "UNKNOWN")
         lvl_color = RED if lvl == "HIGH" else (YELLOW if lvl == "MEDIUM" else GREEN)
-        print(f"{sup:<40} | {tier:<6} | {score:<12} | {lvl_color}{lvl}{RESET}")
+        print(f"{sup_formatted:<48} | {tier:<6} | {score:<12} | {lvl_color}{lvl}{RESET}")
 
     # Recommendations & Alternatives
     if recs:
         print(f"\n{BOLD}{CYAN}📋 CSCO MITIGATION RECOMMENDATION{RESET}")
         rec = recs[0]
+        target_display = format_entity(rec.get('target_supplier_id'))
         print(f"  • {BOLD}Action:{RESET}        {BOLD}{rec.get('action')}{RESET}")
-        print(f"  • {BOLD}Target Supplier:{RESET} {rec.get('target_supplier_id')}")
+        print(f"  • {BOLD}Target Supplier:{RESET} {target_display}")
         print(f"  • {BOLD}Strategic Risk:{RESET}  {rec.get('risk_context')}")
         print(f"  • {BOLD}Approval State:{RESET} {GREEN}{data.get('pending_approvals', {}).get(rec.get('recommendation_id'), 'PENDING')}{RESET}")
 
